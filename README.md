@@ -185,3 +185,10 @@ MIT — see [LICENSE](LICENSE).
 ## Security
 
 See [SECURITY.md](SECURITY.md) for our vulnerability disclosure policy.
+
+---
+
+## SDLC
+
+This repository is developed under the Presidio hardened-family SDLC:
+<https://github.com/presidio-v/presidio-hardened-docs/blob/main/sdlc/sdlc-report.md>.
