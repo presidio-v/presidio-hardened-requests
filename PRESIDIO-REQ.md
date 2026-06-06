@@ -27,12 +27,30 @@ specification; not linked to any PRES-EDU experiment.
 ## Technical Requirements
 
 - Python 3.9+
+- Modern pyproject.toml + hatchling
+- src/presidio_requests/__init__.py layout (wrapper only – do not copy requests source)
+- 100% test coverage with pytest
+- Black + ruff formatting enforced
+- README.md with usage examples showing security wins vs plain requests
+- LICENSE = MIT
+- Version = 0.2.0 (v0.1.0 was initial implementation; v0.2.0 adds sink redaction, improved coverage, pip-audit integration, doc alignment)
+
+## v0.2.0 Implementation Notes
+- Sink-enforced redaction via RedactingFilter on the logger (in addition to call-site redaction in HardenedSession).
+- Redaction coverage extended to params, data, and json bodies in request logging.
+- pip-audit added to [dev] and CI.
+- Dependency floors raised (requests>=2.32.0).
+- Pinning and TLS behavior documented with known limitations (best-effort pre-connect).
+- CVE check retained as on-import awareness; full audits via pip-audit recommended.
+- All mandatory Presidio extensions from this document are now implemented or explicitly noted with status.
+
+- Python 3.9+
 - `requests` (upstream dependency — not wrapped; `presidio_requests`
   re-exports the public surface with hardening applied)
 - `src/presidio_requests/` layout
 - pytest with line coverage enforced in CI
 - ruff lint + format enforced in CI
-- MIT License, version 0.1.0
+- MIT License, version 0.2.0
 
 ## Out of scope
 
