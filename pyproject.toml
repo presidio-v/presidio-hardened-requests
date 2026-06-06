@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "tomli; python_version < '3.11'"]
 build-backend = "hatchling.build"
 
 [project]
 name = "presidio-hardened-requests"
-version = "0.1.0"
+version = "0.2.0"
 description = "Drop-in replacement for requests with Presidio security hardening"
 readme = "README.md"
 license = "MIT"
@@ -25,7 +25,8 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
-    "requests>=2.28.0",
+    "requests>=2.32.0",
+    # urllib3 floors help close known CVEs (see SECURITY.md and angellist family practice)
     "urllib3>=2.0.0",
 ]
 
@@ -35,6 +36,7 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.4.0",
     "responses>=0.25.0",
+    "pip-audit>=2.7.0",
 ]
 
 [project.urls]
