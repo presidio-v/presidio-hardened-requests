@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "presidio-hardened-requests"
 version = "0.2.0"
-description = "Drop-in replacement for requests with Presidio security hardening"
+description = "Drop-in replacement for requests with Presidio security hardening. Independent of Microsoft Presidio (a data-anonymization toolkit)."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
@@ -40,9 +40,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/presidio-security/presidio-hardened-requests"
-Repository = "https://github.com/presidio-security/presidio-hardened-requests"
-Issues = "https://github.com/presidio-security/presidio-hardened-requests/issues"
+Homepage = "https://github.com/presidio-v/presidio-hardened-requests"
+Repository = "https://github.com/presidio-v/presidio-hardened-requests"
+Issues = "https://github.com/presidio-v/presidio-hardened-requests/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/presidio_requests"]

@@ -1,7 +1,7 @@
 # presidio-hardened-requests
 
-[![CI](https://github.com/presidio-security/presidio-hardened-requests/actions/workflows/ci.yml/badge.svg)](https://github.com/presidio-security/presidio-hardened-requests/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/presidio-security/presidio-hardened-requests/actions/workflows/codeql.yml/badge.svg)](https://github.com/presidio-security/presidio-hardened-requests/actions/workflows/codeql.yml)
+[![CI](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/ci.yml/badge.svg)](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/codeql.yml/badge.svg)](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
@@ -46,7 +46,7 @@ pip install presidio-hardened-requests
 For development (includes pip-audit):
 
 ```bash
-git clone https://github.com/presidio-security/presidio-hardened-requests.git
+git clone https://github.com/presidio-v/presidio-hardened-requests.git
 cd presidio-hardened-requests
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
