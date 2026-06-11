@@ -1,13 +1,13 @@
 # presidio-hardened-requests
 
-[![CI](https://github.com/presidio-security/presidio-hardened-requests/actions/workflows/ci.yml/badge.svg)](https://github.com/presidio-security/presidio-hardened-requests/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/presidio-security/presidio-hardened-requests/actions/workflows/codeql.yml/badge.svg)](https://github.com/presidio-security/presidio-hardened-requests/actions/workflows/codeql.yml)
+[![CI](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/ci.yml/badge.svg)](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/codeql.yml/badge.svg)](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 A **100% drop-in replacement** for the Python
 [`requests`](https://docs.python-requests.org/) library with automatic
-Presidio security hardening.
+Presidio security hardening (v0.2.0).
 
 ```python
 # Before (plain requests — no security hardening)
@@ -23,16 +23,16 @@ hardening applied transparently underneath.
 
 ---
 
-## Security Features
+## Security Features (v0.2.0)
 
 | Feature | What it does |
 |---|---|
-| **Strict TLS 1.2+ enforcement** | Rejects TLS 1.0/1.1; enforces strong cipher suites; `verify=True` always |
+| **Strict TLS 1.2+ enforcement** | Rejects TLS 1.0/1.1; enforces strong cipher suites; `verify=True` always (1.3 max supported) |
 | **HTTP → HTTPS auto-upgrade** | Insecure `http://` URLs are silently upgraded to `https://` |
-| **Certificate pinning** | Optional per-host SHA-256 cert fingerprint verification |
-| **Secret redaction** | API keys, tokens, passwords, and auth headers are scrubbed from all logs |
+| **Certificate pinning** | Optional per-host SHA-256 cert fingerprint verification (best-effort; documented limitations) |
+| **Secret redaction** | API keys, tokens, passwords, and auth headers (+ params/data/json in logs) scrubbed. Sink-level `RedactingFilter` enforces for *all* log records on the `presidio_requests` logger (new in v0.2) |
 | **Per-host rate limiting** | Intelligent rate limiting with exponential backoff on errors |
-| **CVE quick-check** | On import, warns if the installed `requests` version has known CVEs |
+| **CVE quick-check + pip-audit** | On-import static awareness + `pip-audit` in dev/CI for current coverage |
 | **Security event logging** | Structured logs for every hardening action (`presidio_requests` logger) |
 
 ---
@@ -43,14 +43,21 @@ hardening applied transparently underneath.
 pip install presidio-hardened-requests
 ```
 
-For development:
+For development (includes pip-audit):
 
 ```bash
-git clone https://github.com/presidio-security/presidio-hardened-requests.git
+git clone https://github.com/presidio-v/presidio-hardened-requests.git
 cd presidio-hardened-requests
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+## v0.2.0 Highlights
+- Sink-enforced secret redaction via `RedactingFilter` (installed automatically on the logger).
+- Improved redaction coverage in request logging (params, data, json bodies).
+- `pip-audit` added to dev extras and CI pipeline.
+- Dependency floors raised; docs aligned with actual implementation (TLS 1.2+, pinning limitations noted).
+- All core Presidio security extensions from PRESIDIO-REQ.md now delivered or clearly documented.
 
 ---
 
