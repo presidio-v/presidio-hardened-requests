@@ -25,9 +25,9 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
-    "requests>=2.32.0",
+    "requests>=2.33.0",
     # urllib3 floors help close known CVEs (see SECURITY.md and angellist family practice)
-    "urllib3>=2.0.0",
+    "urllib3>=2.7.0",
 ]
 
 [project.optional-dependencies]
