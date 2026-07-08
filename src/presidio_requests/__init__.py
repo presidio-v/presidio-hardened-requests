@@ -11,11 +11,13 @@ Usage::
     resp = requests.get("https://httpbin.org/get")
 
 Security features applied transparently:
-  - Strict TLS 1.2+ enforcement with system trust-store certificates
-  - Automatic secret redaction in headers, URLs, and bodies
+  - Strict TLS 1.2+ (1.3 max) with strong ciphers + cert verification
+  - Secret redaction (headers/URLs/params/data/json) via call sites +
+    sink-level RedactingFilter on the logger (v0.2)
   - Per-host rate limiting with exponential backoff
-  - CVE quick-check against known vulnerable ``requests`` versions
+  - CVE awareness (static + pip-audit in dev/CI)
   - Structured security event logging
+  - Optional cert pinning (best-effort, documented limits)
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import socket
 import ssl
 import threading
 import time
@@ -31,18 +34,19 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests  # noqa: F401 — keep reference for submodule access
-from requests import *  # noqa: F401, F403 — re-export entire public API
 from requests import ConnectionError as ConnectionError  # noqa: A004
 from requests import HTTPError, RequestException, Response, Session, Timeout, URLRequired
 
 # ---------------------------------------------------------------------------
 # Package metadata
 # ---------------------------------------------------------------------------
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     # Our additions
     "HardenedSession",
     "SecretRedactor",
+    "RedactingFilter",
+    "install_log_redaction",
     "RateLimiter",
     "check_cve",
     "get_hardened_ssl_context",
@@ -70,7 +74,7 @@ __all__ = [
 logger = logging.getLogger("presidio_requests")
 
 # ---------------------------------------------------------------------------
-# CVE Quick-Check
+# CVE Quick-Check (v0.2: static list + strong recommendation for pip-audit)
 # ---------------------------------------------------------------------------
 KNOWN_VULNERABLE_VERSIONS: dict[str, str] = {
     "2.3.0": "CVE-2014-1829 — cookie leak on redirect",
@@ -78,11 +82,16 @@ KNOWN_VULNERABLE_VERSIONS: dict[str, str] = {
     "2.6.0": "CVE-2015-2296 — session fixation via cookies",
     "2.19.1": "CVE-2018-18074 — redirect credential leak",
     "2.25.1": "CVE-2023-32681 — Proxy-Authorization header leak",
+    # NOTE: For current coverage, run `pip-audit` in CI/dev (added v0.2).
+    # Static list is best-effort only.
 }
 
 
 def check_cve() -> list[str]:
-    """Return list of CVE warnings for the installed ``requests`` version."""
+    """Return list of CVE warnings for the installed ``requests`` version.
+
+    In v0.2.0 the on-import check is supplemented by pip-audit in dev/CI.
+    """
     try:
         installed = _pkg_version("requests")
     except Exception:
@@ -117,11 +126,16 @@ class CertificatePinError(RequestException):
 
 
 def _get_cert_fingerprint(host: str, port: int = 443) -> str | None:
-    """Retrieve the SHA-256 fingerprint of the server's TLS certificate."""
+    """Retrieve the SHA-256 fingerprint of the server's TLS certificate.
+
+    Note (v0.2): This is a best-effort pre-connect check for optional pinning.
+    It has a TOCTOU window vs the actual request and uses a separate socket.
+    For production pinning, prefer integrated solutions or truststore + HPKP-like.
+    """
     try:
         ctx = ssl.create_default_context()
         with ctx.wrap_socket(
-            __import__("socket").create_connection((host, port), timeout=5),
+            socket.create_connection((host, port), timeout=5),
             server_hostname=host,
         ) as sock:
             cert_bin = sock.getpeercert(binary_form=True)
@@ -184,6 +198,62 @@ class SecretRedactor:
 
 
 _default_redactor = SecretRedactor()
+
+
+# ---------------------------------------------------------------------------
+# Sink-level log redaction (v0.2.0 addition for defense-in-depth)
+# Matches family pattern from more mature projects (e.g. angellist).
+# ---------------------------------------------------------------------------
+
+_SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"(sk_(?:live|test)_)[A-Za-z0-9]+"), r"\1***REDACTED***"),
+    (re.compile(r"(sk-ant-)[A-Za-z0-9\-_]+"), r"\1***REDACTED***"),
+    (re.compile(r"(Bearer\s+)[A-Za-z0-9\-._~+/]+=*"), r"\1***REDACTED***"),
+    (re.compile(r"(access_token=)[^&\s]+"), r"\1***REDACTED***"),
+    (re.compile(r"(api_key=)[^&\s]+"), r"\1***REDACTED***"),
+    (re.compile(r"(Authorization:\s*)[^\r\n]+", re.IGNORECASE), r"\1***REDACTED***"),
+]
+
+
+class RedactingFilter(logging.Filter):
+    """A logging.Filter that scrubs secrets from every record at the sink.
+
+    Installed on the ``presidio_requests`` logger so the redaction commitment
+    is enforced for *every* log record, not just the call sites that redact
+    manually.
+    """
+
+    def __init__(self, redactor: SecretRedactor | None = None) -> None:
+        super().__init__()
+        self._redactor = redactor or SecretRedactor()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            message = record.getMessage()
+        except Exception:  # pragma: no cover - never let logging crash
+            return True
+        record.msg = self._redactor.redact(message)
+        record.args = None
+        return True
+
+
+def install_log_redaction(redactor: SecretRedactor | None = None) -> RedactingFilter:
+    """Attach a RedactingFilter to the ``presidio_requests`` logger.
+
+    Idempotent. Returns the active filter.
+    """
+    logger = logging.getLogger("presidio_requests")
+    for existing in logger.filters:
+        if isinstance(existing, RedactingFilter):
+            return existing
+    flt = RedactingFilter(redactor)
+    logger.addFilter(flt)
+    return flt
+
+
+# Enforce redaction at the sink as soon as the module is imported.
+install_log_redaction()
+
 
 # ---------------------------------------------------------------------------
 # Rate Limiter
@@ -329,11 +399,27 @@ class HardenedSession(Session):
             if kwargs.get("headers")
             else None
         )
+        # v0.2: also attempt redaction on body/query for better coverage
+        redacted_params = (
+            self.redactor.redact_dict(kwargs.get("params")) if kwargs.get("params") else None
+        )
+        redacted_data = (
+            self.redactor.redact(str(kwargs.get("data"))) if kwargs.get("data") else None
+        )
+        redacted_json = (
+            self.redactor.redact_dict(kwargs.get("json"))
+            if isinstance(kwargs.get("json"), dict)
+            else None
+        )
+
         logger.debug(
-            "Request %s %s headers=%s",
+            "Request %s %s headers=%s params=%s data=%s json=%s",
             method.upper(),
             redacted_url,
             redacted_headers,
+            redacted_params,
+            redacted_data,
+            redacted_json,
         )
 
     def _check_pinned_cert(self, url: str) -> None:
@@ -392,15 +478,15 @@ def options(url: str, **kwargs: Any) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# On-import security audit
+# On-import security audit (v0.2: includes sink redaction install + pip-audit note)
 # ---------------------------------------------------------------------------
 def _on_import_audit() -> None:
     cve_warnings = check_cve()
     for w in cve_warnings:
         logger.warning("[PRESIDIO CVE CHECK] %s", w)
     if not cve_warnings:
-        logger.info("[PRESIDIO CVE CHECK] requests version OK")
-    logger.info("Presidio hardening applied")
+        logger.info("[PRESIDIO CVE CHECK] requests version OK (supplement with pip-audit)")
+    logger.info("Presidio hardening applied (v0.2.0: sink redaction filter active)")
 
 
 _on_import_audit()
