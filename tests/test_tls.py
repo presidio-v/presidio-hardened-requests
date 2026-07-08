@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import ssl
 
 import responses
@@ -64,3 +65,45 @@ class TestCertificatePinning:
         s = HardenedSession(pinned_certs={"other.com": "abc123"})
         resp = s.get("https://example.com/")
         assert resp.status_code == 200
+
+    def test_fingerprint_lookup_uses_hardened_tls_context(self, monkeypatch):
+        cert = b"certificate"
+
+        class FakeSocket:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def getpeercert(self, *, binary_form=False):
+                assert binary_form is True
+                return cert
+
+        class FakeContext:
+            minimum_version = ssl.TLSVersion.TLSv1_2
+
+            def wrap_socket(self, sock, *, server_hostname):
+                assert sock == "socket"
+                assert server_hostname == "example.com"
+                return FakeSocket()
+
+        def fail_default_context():
+            raise AssertionError("certificate pinning must use the hardened TLS context")
+
+        def fake_hardened_context():
+            return FakeContext()
+
+        def fake_create_connection(address, timeout):
+            assert address == ("example.com", 8443)
+            assert timeout == 5
+            return "socket"
+
+        monkeypatch.setattr(presidio_requests.ssl, "create_default_context", fail_default_context)
+        monkeypatch.setattr(presidio_requests, "get_hardened_ssl_context", fake_hardened_context)
+        monkeypatch.setattr(presidio_requests.socket, "create_connection", fake_create_connection)
+
+        assert (
+            presidio_requests._get_cert_fingerprint("example.com", 8443)
+            == hashlib.sha256(cert).hexdigest()
+        )
