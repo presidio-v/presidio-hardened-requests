@@ -48,7 +48,7 @@ class TestDropInAPI:
         assert presidio_requests.URLRequired is not None
 
     def test_version(self):
-        assert presidio_requests.__version__ == "0.1.0"
+        assert presidio_requests.__version__ == "0.2.0"
 
 
 class TestDropInBehavior:
