@@ -133,7 +133,7 @@ def _get_cert_fingerprint(host: str, port: int = 443) -> str | None:
     For production pinning, prefer integrated solutions or truststore + HPKP-like.
     """
     try:
-        ctx = ssl.create_default_context()
+        ctx = get_hardened_ssl_context()
         with ctx.wrap_socket(
             socket.create_connection((host, port), timeout=5),
             server_hostname=host,
