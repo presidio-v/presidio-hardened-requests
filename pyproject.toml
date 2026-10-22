@@ -27,6 +27,10 @@ dependencies = [
     "requests>=2.33.0",
     # urllib3 floors help close known CVEs (see SECURITY.md and angellist family practice)
     "urllib3>=2.7.0",
+    # certifi 2026.10.19 drops emSign ECC Root CA - G3 (eMudhra intermediates with
+    # trivially recoverable keys, 2026-10). requests does not check revocation, so
+    # only the bundle removal protects HardenedSession(verify=True).
+    "certifi>=2026.10.19",
 ]
 
 [project.optional-dependencies]

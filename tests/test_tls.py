@@ -107,3 +107,14 @@ class TestCertificatePinning:
             presidio_requests._get_cert_fingerprint("example.com", 8443)
             == hashlib.sha256(cert).hexdigest()
         )
+
+
+class TestCABundle:
+    def test_default_bundle_excludes_compromised_emudhra_root(self):
+        # eMudhra weak intermediate keys (2026-10): requests never checks revocation,
+        # so the root must be absent from the bundle verify=True resolves to.
+        from requests.utils import DEFAULT_CA_BUNDLE_PATH
+
+        with open(DEFAULT_CA_BUNDLE_PATH, encoding="ascii") as fh:
+            bundle = fh.read()
+        assert "emSign ECC Root CA - G3" not in bundle

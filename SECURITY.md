@@ -42,6 +42,10 @@ This package provides the following hardening over plain `requests` (accurate as
 - CodeQL analysis runs on every push and pull request.
 - `pip-audit` runs in CI and is available via `[dev]` extras (added v0.2.0).
 - Runtime floors raised for key transitive deps (e.g. requests).
+- `certifi>=2026.10.19`: the CA bundle no longer trusts emSign ECC Root CA - G3,
+  the root behind the eMudhra intermediates whose private keys were trivially
+  recoverable (Mozilla bug 2083449). `requests` does not check revocation, so the
+  browser-side blocks do not cover it. Kept as a floor, not a pin.
 - All changes require passing CI (pytest + ruff + pip-audit) before merge.
 
 ## Responsible Disclosure
