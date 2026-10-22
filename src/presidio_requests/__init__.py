@@ -40,7 +40,7 @@ from requests import HTTPError, RequestException, Response, Session, Timeout, UR
 # ---------------------------------------------------------------------------
 # Package metadata
 # ---------------------------------------------------------------------------
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __all__ = [
     # Our additions
     "HardenedSession",

@@ -7,7 +7,7 @@
 
 A **100% drop-in replacement** for the Python
 [`requests`](https://docs.python-requests.org/) library with automatic
-Presidio security hardening (v0.2.0).
+Presidio security hardening (v0.2.1).
 
 ```python
 # Before (plain requests — no security hardening)
@@ -51,6 +51,13 @@ cd presidio-hardened-requests
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+## v0.2.1 Highlights
+
+- Security patch: requires `certifi>=2026.10.19`, so `verify=True` no longer trusts
+  emSign ECC Root CA - G3 (eMudhra intermediates with trivially recoverable keys,
+  Mozilla bug 2083449). `requests` does not check revocation, so only the bundle
+  removal protects callers.
 
 ## v0.2.0 Highlights
 - Sink-enforced secret redaction via `RedactingFilter` (installed automatically on the logger).
