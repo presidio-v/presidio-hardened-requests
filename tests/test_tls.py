@@ -62,7 +62,7 @@ class TestCertificatePinning:
     @responses.activate
     def test_no_pin_check_for_unlisted_host(self):
         responses.add(responses.GET, "https://example.com/", status=200)
-        s = HardenedSession(pinned_certs={"other.com": "abc123"})
+        s = HardenedSession(pinned_certs={"other.com": "ab" * 32})
         resp = s.get("https://example.com/")
         assert resp.status_code == 200
 

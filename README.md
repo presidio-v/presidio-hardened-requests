@@ -28,9 +28,9 @@ hardening applied transparently underneath.
 | Feature | What it does |
 |---|---|
 | **Strict TLS 1.2+ enforcement** | Rejects TLS 1.0/1.1; enforces strong cipher suites; `verify=True` always (1.3 max supported) |
-| **HTTP → HTTPS auto-upgrade** | Insecure `http://` URLs are silently upgraded to `https://` |
-| **Certificate pinning** | Optional per-host SHA-256 cert fingerprint verification (best-effort; documented limitations) |
-| **Secret redaction** | API keys, tokens, passwords, and auth headers (+ params/data/json in logs) scrubbed. Sink-level `RedactingFilter` enforces for *all* log records on the `presidio_requests` logger (new in v0.2) |
+| **HTTP → HTTPS auto-upgrade** | Insecure `http://` URLs (any case) are upgraded to `https://`; any non-HTTPS hop, including a redirect, is refused with `InsecureTransportError` |
+| **Certificate pinning** | Optional per-host SHA-256 fingerprint, checked during the TLS handshake of every connection to that host (including redirect hops); a mismatch raises `CertificatePinError` |
+| **Secret redaction** | API keys, tokens, passwords, cookies and auth headers (+ params/data/json in logs, matched by key name and by value) scrubbed. Sink-level `RedactingFilter` enforces for *all* log records on the `presidio_requests` logger (new in v0.2) |
 | **Per-host rate limiting** | Intelligent rate limiting with exponential backoff on errors |
 | **CVE quick-check + pip-audit** | On-import static awareness + `pip-audit` in dev/CI for current coverage |
 | **Security event logging** | Structured logs for every hardening action (`presidio_requests` logger) |
@@ -51,6 +51,14 @@ cd presidio-hardened-requests
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+## v0.2.2 Highlights
+- Security fix ([GHSA-cmr9-799c-jmhv](https://github.com/presidio-v/presidio-hardened-requests/security/advisories/GHSA-cmr9-799c-jmhv)):
+  - the HTTPS upgrade now handles any scheme case and leading whitespace;
+  - every request and redirect hop must be HTTPS when `enforce_tls=True`;
+  - certificate pins are enforced on the request's own connection and fail closed;
+  - log redaction also matches credential key names (`X-API-Key`, `Cookie`, `api_key`, nested JSON) and URL passwords.
+- `pinned_certs` values must be SHA-256 hex fingerprints (colons allowed); invalid values raise `ValueError`.
 
 ## v0.2.1 Highlights
 

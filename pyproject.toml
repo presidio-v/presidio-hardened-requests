@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "presidio-hardened-requests"
-version = "0.2.1"
+version = "0.2.2"
 description = "Drop-in replacement for requests with Presidio security hardening. Independent of Microsoft Presidio (a data-anonymization toolkit)."
 readme = "README.md"
 license = "MIT"
