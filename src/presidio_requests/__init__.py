@@ -17,7 +17,7 @@ Security features applied transparently:
   - Per-host rate limiting with exponential backoff
   - CVE awareness (static + pip-audit in dev/CI)
   - Structured security event logging
-  - Optional cert pinning (best-effort, documented limits)
+  - Optional cert pinning, checked on every TLS connection (v0.2.2)
 """
 
 from __future__ import annotations
@@ -31,19 +31,30 @@ import threading
 import time
 from importlib.metadata import version as _pkg_version
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import requests  # noqa: F401 — keep reference for submodule access
 from requests import ConnectionError as ConnectionError  # noqa: A004
-from requests import HTTPError, RequestException, Response, Session, Timeout, URLRequired
+from requests import (
+    HTTPError,
+    PreparedRequest,
+    RequestException,
+    Response,
+    Session,
+    Timeout,
+    URLRequired,
+)
+from requests.adapters import HTTPAdapter
 
 # ---------------------------------------------------------------------------
 # Package metadata
 # ---------------------------------------------------------------------------
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __all__ = [
     # Our additions
     "HardenedSession",
+    "CertificatePinError",
+    "InsecureTransportError",
     "SecretRedactor",
     "RedactingFilter",
     "install_log_redaction",
@@ -125,12 +136,58 @@ class CertificatePinError(RequestException):
     """Raised when a server certificate does not match the pinned fingerprint."""
 
 
+class InsecureTransportError(RequestException):
+    """Raised when ``enforce_tls`` is on and a request or redirect hop is not HTTPS."""
+
+
+_FINGERPRINT_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _normalize_pins(pins: dict[str, str] | None) -> dict[str, str]:
+    """Lowercase hosts (no trailing dot) and SHA-256 hex fingerprints (no colons)."""
+    out: dict[str, str] = {}
+    for host, fp in (pins or {}).items():
+        h = host.strip().rstrip(".").lower()
+        f = fp.strip().replace(":", "").lower()
+        if not h or not _FINGERPRINT_RE.fullmatch(f):
+            raise ValueError(f"pinned_certs[{host!r}] must be a SHA-256 hex fingerprint")
+        out[h] = f
+    return out
+
+
+class _PinnedAdapter(HTTPAdapter):
+    """Adapter whose connections must present the pinned certificate.
+
+    urllib3 checks ``assert_fingerprint`` during the handshake of every connection
+    it opens (first request, redirect hops, reused pools), after normal CA
+    verification. A mismatch fails the request; there is no fail-open path.
+    """
+
+    def __init__(self, fingerprint: str) -> None:
+        self._fingerprint = fingerprint
+        super().__init__()
+
+    def init_poolmanager(self, *args: Any, **pool_kwargs: Any) -> None:
+        pool_kwargs["assert_fingerprint"] = self._fingerprint
+        super().init_poolmanager(*args, **pool_kwargs)
+
+    def send(self, request: PreparedRequest, *args: Any, **kwargs: Any) -> Response:
+        try:
+            return super().send(request, *args, **kwargs)
+        except requests.exceptions.SSLError as e:
+            if "fingerprint" in str(e).lower():
+                raise CertificatePinError(
+                    f"Certificate fingerprint mismatch for {urlparse(request.url).hostname}"
+                ) from e
+            raise
+
+
 def _get_cert_fingerprint(host: str, port: int = 443) -> str | None:
     """Retrieve the SHA-256 fingerprint of the server's TLS certificate.
 
-    Note (v0.2): This is a best-effort pre-connect check for optional pinning.
-    It has a TOCTOU window vs the actual request and uses a separate socket.
-    For production pinning, prefer integrated solutions or truststore + HPKP-like.
+    Diagnostic helper only (for example, to obtain a value for ``pinned_certs``).
+    Since v0.2.2 pins are enforced on the request's own connection by
+    ``_PinnedAdapter``, not by this separate probe.
     """
     try:
         ctx = get_hardened_ssl_context()
@@ -161,6 +218,7 @@ class SecretRedactor:
         ),
         ("Authorization header value", re.compile(r"(authorization:\s*)\S+", re.IGNORECASE)),
         ("AWS Key", re.compile(r"(AKIA)[A-Z0-9]{16}")),
+        ("URL userinfo password", re.compile(r"(://[^/\s:@]*:)[^@/\s]+(?=@)")),
         (
             "Generic secret",
             re.compile(
@@ -169,6 +227,30 @@ class SecretRedactor:
             ),
         ),
     ]
+
+    # A dict key is a credential when one of its parts ("x-api-key" -> x, api, key)
+    # is in this set; its whole value is then replaced, whatever it looks like.
+    SENSITIVE_KEY_PARTS: frozenset[str] = frozenset(
+        {
+            "apikey",
+            "auth",
+            "authorization",
+            "bearer",
+            "cookie",
+            "credential",
+            "credentials",
+            "jwt",
+            "key",
+            "passwd",
+            "password",
+            "pwd",
+            "secret",
+            "session",
+            "sessionid",
+            "signature",
+            "token",
+        }
+    )
 
     def __init__(self, placeholder: str = "***REDACTED***") -> None:
         self.placeholder = placeholder
@@ -191,10 +273,32 @@ class SecretRedactor:
             result = pattern.sub(_replace, result)
         return result
 
-    def redact_dict(self, d: dict[str, str] | None) -> dict[str, str]:
+    def is_sensitive_key(self, key: Any) -> bool:
+        parts = re.split(r"[^a-z0-9]+", str(key).lower())
+        return any(p in self.SENSITIVE_KEY_PARTS for p in parts)
+
+    def redact_value(self, value: Any) -> Any:
+        """Redact strings by pattern and dicts/lists recursively by key and pattern."""
+        if isinstance(value, dict):
+            return self.redact_dict(value)
+        if isinstance(value, (list, tuple)):
+            return [
+                (v[0], self.placeholder)
+                if isinstance(v, tuple) and len(v) == 2 and self.is_sensitive_key(v[0])
+                else self.redact_value(v)
+                for v in value
+            ]
+        if isinstance(value, bytes):
+            return self.redact(value.decode("utf-8", "replace"))
+        return self.redact(value)
+
+    def redact_dict(self, d: dict[str, Any] | None) -> dict[str, Any]:
         if not d:
             return d or {}
-        return {k: self.redact(v) for k, v in d.items()}
+        return {
+            k: self.placeholder if self.is_sensitive_key(k) else self.redact_value(v)
+            for k, v in d.items()
+        }
 
 
 _default_redactor = SecretRedactor()
@@ -346,9 +450,10 @@ class HardenedSession(Session):
         super().__init__()
         self.redactor = redactor or SecretRedactor()
         self.rate_limiter = rate_limiter or RateLimiter()
-        self.pinned_certs: dict[str, str] = pinned_certs or {}
+        self.pinned_certs: dict[str, str] = _normalize_pins(pinned_certs)
         self.enforce_tls = enforce_tls
         self._apply_tls_hardening()
+        self._mount_pins()
         logger.info("Presidio hardening applied — HardenedSession initialized")
 
     def _apply_tls_hardening(self) -> None:
@@ -365,16 +470,42 @@ class HardenedSession(Session):
             logger.debug("urllib3 TLS context customization unavailable")
         self.verify = True
 
+    def _mount_pins(self) -> None:
+        # Both prefixes end the host part, so "https://api.example.com" never
+        # matches "https://api.example.com.evil.net". requests lowercases the
+        # URL before matching mount prefixes.
+        for host, fingerprint in self.pinned_certs.items():
+            adapter = _PinnedAdapter(fingerprint)
+            self.mount(f"https://{host}/", adapter)
+            self.mount(f"https://{host}:", adapter)
+
+    def _upgrade_to_https(self, url: str) -> str:
+        """Upgrade an http URL as requests will read it (leading whitespace, any case)."""
+        if not isinstance(url, str):
+            return url
+        stripped = url.lstrip()
+        parts = urlsplit(stripped)
+        if parts.scheme.lower() == "http":
+            logger.warning("Upgrading insecure HTTP to HTTPS: %s", self.redactor.redact(url))
+            return urlunsplit(("https",) + tuple(parts[1:]))
+        return url
+
+    def send(self, request: PreparedRequest, **kwargs: Any) -> Response:  # type: ignore[override]
+        # Every hop requests sends, including redirects, passes through here.
+        if self.enforce_tls and urlsplit(request.url or "").scheme.lower() != "https":
+            raise InsecureTransportError(
+                "Refusing non-HTTPS request with enforce_tls=True: "
+                + self.redactor.redact(request.url or "")
+            )
+        return super().send(request, **kwargs)
+
     def request(self, method: str, url: str, **kwargs: Any) -> Response:  # type: ignore[override]
-        if self.enforce_tls and url.startswith("http://"):
-            logger.warning("Upgrading insecure HTTP to HTTPS: %s", url)
-            url = "https://" + url[7:]
+        if self.enforce_tls:
+            url = self._upgrade_to_https(url)
 
         self.rate_limiter.wait_if_needed(url)
 
         self._log_redacted_request(method, url, kwargs)
-
-        self._check_pinned_cert(url)
 
         try:
             response = super().request(method, url, **kwargs)
@@ -399,16 +530,21 @@ class HardenedSession(Session):
             if kwargs.get("headers")
             else None
         )
-        # v0.2: also attempt redaction on body/query for better coverage
+        # Credentials are matched by key name as well as by value pattern (v0.2.2).
         redacted_params = (
-            self.redactor.redact_dict(kwargs.get("params")) if kwargs.get("params") else None
+            self.redactor.redact_value(kwargs.get("params")) if kwargs.get("params") else None
         )
+        data = kwargs.get("data")
         redacted_data = (
-            self.redactor.redact(str(kwargs.get("data"))) if kwargs.get("data") else None
+            self.redactor.redact_value(data)
+            if isinstance(data, (dict, list, tuple))
+            else self.redactor.redact(str(data))
+            if data
+            else None
         )
         redacted_json = (
-            self.redactor.redact_dict(kwargs.get("json"))
-            if isinstance(kwargs.get("json"), dict)
+            self.redactor.redact_value(kwargs.get("json"))
+            if kwargs.get("json") is not None
             else None
         )
 
@@ -421,22 +557,6 @@ class HardenedSession(Session):
             redacted_data,
             redacted_json,
         )
-
-    def _check_pinned_cert(self, url: str) -> None:
-        if not self.pinned_certs:
-            return
-        parsed = urlparse(url)
-        host = parsed.hostname
-        if not host or host not in self.pinned_certs:
-            return
-        port = parsed.port or 443
-        actual = _get_cert_fingerprint(host, port)
-        expected = self.pinned_certs[host]
-        if actual and actual != expected:
-            raise CertificatePinError(
-                f"Certificate fingerprint mismatch for {host}: "
-                f"expected {expected[:16]}…, got {actual[:16]}…"
-            )
 
 
 # ---------------------------------------------------------------------------

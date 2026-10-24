@@ -36,7 +36,14 @@ jobs:
 
       - name: Audit dependencies for known CVEs (pip-audit)
         run: |
-          pip-audit
+          if [ "${{ matrix.python-version }}" = "3.10" ]; then
+            # filelock is pip-audit's own dependency, not this package's. Its fixes
+            # (>= 4.2.1) require Python 3.11, so on 3.10 only these known ids are
+            # ignored; any other advisory still fails the job.
+            pip-audit --ignore-vuln CVE-2026-112906 --ignore-vuln CVE-2026-112907 --ignore-vuln CVE-2026-112913 --ignore-vuln CVE-2026-112914 --ignore-vuln CVE-2026-112937 --ignore-vuln CVE-2026-112940
+          else
+            pip-audit
+          fi
 
       - name: Run tests with coverage
         run: |

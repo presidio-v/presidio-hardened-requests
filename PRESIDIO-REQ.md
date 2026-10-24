@@ -12,10 +12,11 @@ specification; not linked to any PRES-EDU experiment.
 
 - Strict TLS 1.2+ enforcement — TLS 1.0/1.1 rejected, strong cipher suites
   only, `verify=True` always
-- HTTP → HTTPS silent auto-upgrade — insecure `http://` URLs are rewritten
-  to `https://` before the request is issued
-- Optional per-host certificate pinning — SHA-256 fingerprint verification,
-  opt-in per `HardenedSession`
+- HTTP → HTTPS silent auto-upgrade — insecure `http://` URLs (any case) are
+  rewritten to `https://` before the request is issued; with `enforce_tls`,
+  any non-HTTPS hop, including a redirect, is refused
+- Optional per-host certificate pinning — SHA-256 fingerprint verification
+  on every connection to the host, fail closed, opt-in per `HardenedSession`
 - Secret redaction — API keys, tokens, passwords, and `Authorization`
   headers are scrubbed from all log output
 - Per-host rate limiting with exponential backoff on errors
@@ -33,7 +34,7 @@ specification; not linked to any PRES-EDU experiment.
 - Black + ruff formatting enforced
 - README.md with usage examples showing security wins vs plain requests
 - LICENSE = MIT
-- Version = 0.2.1 (v0.1.0 was initial implementation; v0.2.0 adds sink redaction, improved coverage, pip-audit integration, doc alignment; v0.2.1 requires certifi>=2026.10.19 after the eMudhra CA key compromise)
+- Version = 0.2.1 (v0.1.0 was initial implementation; v0.2.0 adds sink redaction, improved coverage, pip-audit integration, doc alignment; v0.2.1 requires certifi>=2026.10.19 after the eMudhra CA key compromise; v0.2.2 fixes GHSA-cmr9-799c-jmhv)
 
 ## v0.2.0 Implementation Notes
 - Sink-enforced redaction via RedactingFilter on the logger (in addition to call-site redaction in HardenedSession).

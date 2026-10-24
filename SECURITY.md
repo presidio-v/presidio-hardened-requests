@@ -28,8 +28,8 @@ This package provides the following hardening over plain `requests` (accurate as
 
 - **TLS 1.2+ enforcement** — TLS 1.0 and 1.1 are rejected. Strong cipher
   suites are enforced. Certificate verification is always enabled. (1.3 max where supported.)
-- **HTTP → HTTPS upgrade** — Insecure HTTP URLs are automatically upgraded.
-- **Certificate pinning** — Optional SHA-256 fingerprint verification per host (best-effort pre-connect; see code/docs for limitations).
+- **HTTP → HTTPS upgrade** — Insecure HTTP URLs are automatically upgraded; with `enforce_tls`, non-HTTPS hops (including redirects) are refused.
+- **Certificate pinning** — Optional SHA-256 fingerprint verification per host, enforced during the handshake of every connection and failing closed (v0.2.2; earlier versions used a fail-open pre-connect probe, GHSA-cmr9-799c-jmhv).
 - **Secret redaction** — API keys, tokens, passwords, and authorization
   headers (plus params/data/json in request logs) are scrubbed. Sink-level `RedactingFilter` on the `presidio_requests` logger enforces redaction for all records (v0.2 addition).
 - **Per-host rate limiting** — Prevents accidental DoS with exponential
