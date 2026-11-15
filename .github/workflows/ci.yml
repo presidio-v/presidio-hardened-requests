@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -35,15 +35,7 @@ jobs:
           ruff check .
 
       - name: Audit dependencies for known CVEs (pip-audit)
-        run: |
-          if [ "${{ matrix.python-version }}" = "3.10" ]; then
-            # filelock is pip-audit's own dependency, not this package's. Its fixes
-            # (>= 4.2.1) require Python 3.11, so on 3.10 only these known ids are
-            # ignored; any other advisory still fails the job.
-            pip-audit --ignore-vuln CVE-2026-112906 --ignore-vuln CVE-2026-112907 --ignore-vuln CVE-2026-112913 --ignore-vuln CVE-2026-112914 --ignore-vuln CVE-2026-112937 --ignore-vuln CVE-2026-112940
-          else
-            pip-audit
-          fi
+        run: pip-audit
 
       - name: Run tests with coverage
         run: |
