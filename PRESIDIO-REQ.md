@@ -27,14 +27,14 @@ specification; not linked to any PRES-EDU experiment.
 
 ## Technical Requirements
 
-- Python 3.9+
+- Python 3.11+
 - Modern pyproject.toml + hatchling
 - src/presidio_requests/__init__.py layout (wrapper only – do not copy requests source)
 - 100% test coverage with pytest
 - Black + ruff formatting enforced
 - README.md with usage examples showing security wins vs plain requests
 - LICENSE = MIT
-- Version = 0.2.1 (v0.1.0 was initial implementation; v0.2.0 adds sink redaction, improved coverage, pip-audit integration, doc alignment; v0.2.1 requires certifi>=2026.10.19 after the eMudhra CA key compromise; v0.2.2 fixes GHSA-cmr9-799c-jmhv)
+- Version = 0.3.0 (v0.1.0 was initial implementation; v0.2.0 adds sink redaction, improved coverage, pip-audit integration, doc alignment; v0.2.1 requires certifi>=2026.10.19 after the eMudhra CA key compromise; v0.2.2 fixes GHSA-cmr9-799c-jmhv; v0.3.0 raises the floor to Python 3.11)
 
 ## v0.2.0 Implementation Notes
 - Sink-enforced redaction via RedactingFilter on the logger (in addition to call-site redaction in HardenedSession).
@@ -45,13 +45,13 @@ specification; not linked to any PRES-EDU experiment.
 - CVE check retained as on-import awareness; full audits via pip-audit recommended.
 - All mandatory Presidio extensions from this document are now implemented or explicitly noted with status.
 
-- Python 3.9+
+- Python 3.11+
 - `requests` (upstream dependency — not wrapped; `presidio_requests`
   re-exports the public surface with hardening applied)
 - `src/presidio_requests/` layout
 - pytest with line coverage enforced in CI
 - ruff lint + format enforced in CI
-- MIT License, version 0.2.1
+- MIT License, version 0.3.0
 
 ## Out of scope
 
@@ -83,10 +83,15 @@ whose CAs rotate outside the customer's control; a global pinning default
 would have caused outages on CA rotation. Opt-in per-host pinning lets the
 customer pin the small set of endpoints whose CAs they do control.
 
-**Scope decision:** Python 3.9+ floor. The customer's deployment targets
-include Ubuntu 20.04 LTS hosts (Python 3.8 EOL, 3.9 available via
-`deadsnakes`); raising above 3.9 would have excluded existing production
-hosts.
+**Scope decision (superseded 2026-11-15):** Python 3.9+ floor. The customer's
+deployment targets included Ubuntu 20.04 LTS hosts (Python 3.8 EOL, 3.9
+available via `deadsnakes`); raising above 3.9 would have excluded existing
+production hosts.
+
+**Scope decision (v0.3.0):** Python 3.11+ floor, the family support policy.
+3.10 reached end of life in October 2026, and the dependency audit can no
+longer pass on it (pip-audit's `filelock` fixes require 3.11). Hosts still on
+3.10 or older stay on 0.2.x.
 
 ## SDLC
 

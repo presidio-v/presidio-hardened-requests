@@ -3,11 +3,11 @@
 [![CI](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/ci.yml/badge.svg)](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/codeql.yml/badge.svg)](https://github.com/presidio-v/presidio-hardened-requests/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 A **100% drop-in replacement** for the Python
 [`requests`](https://docs.python-requests.org/) library with automatic
-Presidio security hardening (v0.2.1).
+Presidio security hardening (v0.3.0).
 
 ```python
 # Before (plain requests — no security hardening)
@@ -51,6 +51,12 @@ cd presidio-hardened-requests
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+## v0.3.0 Highlights
+- Support policy: Python 3.11 is now the minimum (3.10 reached end of life in October 2026).
+  On 3.10, pip-audit's own `filelock` dependency resolves to 4.1.0, whose fixes (>= 4.2.1)
+  require 3.11, so the 3.10 audit could no longer pass. No API change; stay on 0.2.x if you
+  still run 3.10.
 
 ## v0.2.2 Highlights
 - Security fix ([GHSA-cmr9-799c-jmhv](https://github.com/presidio-v/presidio-hardened-requests/security/advisories/GHSA-cmr9-799c-jmhv)):
